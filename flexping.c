@@ -61,6 +61,8 @@ char pkg[] = "netkit-base-0.10";
  *                *    This program has to run SUID to ROOT to access the ICMP socket.
  *                 */
 
+#define _GNU_SOURCE
+
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/file.h>
@@ -79,6 +81,10 @@ char pkg[] = "netkit-base-0.10";
 #include <ctype.h>
 #include <errno.h>
 #include <getopt.h>
+#include <sched.h>
+#include <fcntl.h>
+
+
 
 /*
  *  * Note: on some systems dropping root makes the process dumpable or
@@ -202,9 +208,11 @@ int main(int argc, char *argv[])
     struct protoent *proto;
     struct in_addr ifaddr;
     int i;
-    int ch, fdmask, hold, packlen, preload;
+    int ch, fdmask, hold, packlen, preload, path_len;
     u_char *datap, *packet;
     char *target, hnamebuf[MAXHOSTNAMELEN];
+    char *ns, *path;
+    int namespace_f;
     u_char ttl, loop;
     int am_i_root;
 #ifdef IP_OPTIONS
@@ -222,13 +230,7 @@ int main(int argc, char *argv[])
         (void)fprintf(stderr, "ping: unknown protocol icmp.\n");
         exit(2);
     }
-    if ((s = socket(AF_INET, SOCK_RAW, proto->p_proto)) < 0) {
-        if (errno==EPERM) {
-            fprintf(stderr, "ping: ping must run as root\n");
-        }
-        else perror("ping: socket");
-        exit(2);
-    }
+    
 
 #ifdef SAFE_TO_DROP_ROOT
     setuid(getuid());
@@ -344,6 +346,36 @@ int main(int argc, char *argv[])
             case 'x':
                 //vrf
                 printf("VRF\n");
+                
+                //grab namespace name from arg
+                ns = calloc(1, strlen(optarg));
+                sscanf(optarg, "%s", ns);
+                
+                //get fd from opening /var/run/netns/NS_NAME
+                path_len = strlen("/var/run/netns/") + strlen(ns) + 2;
+                path = calloc(1, path_len);
+                snprintf(path, path_len,"/var/run/netns/%s",ns);
+                
+                
+                if(namespace_f = open(path, O_RDONLY) < 0){
+                    printf("Error opening file: %s\n", path);
+                    return -1;
+                }
+                
+                //set NS_NAME
+                if(setns(namespace_f, CLONE_NEWNET) == -1){
+                    if(errno == EPERM){
+                        printf("flexping requires sudo before setting vrf\n");
+                        return -1;
+                    }
+                    else{
+                        printf("Error setting namespace to %s errno: %s\n", path, strerror(errno));
+                        return -1;
+                    }
+                }
+                
+                close(namespace_f);
+                break;
             default:
                 usage();
         }
@@ -352,6 +384,16 @@ int main(int argc, char *argv[])
 
     if (argc != 1)
         usage();
+    
+    if ((s = socket(AF_INET, SOCK_RAW, proto->p_proto)) < 0) {
+        if (errno==EPERM) {
+            fprintf(stderr, "ping: ping must run as root\n");
+        }
+        else perror("ping: socket");
+        exit(2);
+    }
+
+    //test: close fd to ns here
     target = *argv;
 
     memset(&whereto, 0, sizeof(struct sockaddr));
