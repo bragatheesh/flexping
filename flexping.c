@@ -83,6 +83,7 @@ char pkg[] = "netkit-base-0.10";
 #include <getopt.h>
 #include <sched.h>
 #include <fcntl.h>
+#include <sys/syscall.h>
 
 
 
@@ -212,7 +213,7 @@ int main(int argc, char *argv[])
     u_char *datap, *packet;
     char *target, hnamebuf[MAXHOSTNAMELEN];
     char *ns, *path;
-    int namespace_f;
+    int namespaceFd;
     u_char ttl, loop;
     int am_i_root;
 #ifdef IP_OPTIONS
@@ -230,11 +231,26 @@ int main(int argc, char *argv[])
         (void)fprintf(stderr, "ping: unknown protocol icmp.\n");
         exit(2);
     }
-    
+/*
+    // acquire a handle to the namespace
+    int namespaceFd = open("/var/run/netns/ns1", O_RDONLY);
+    if (namespaceFd == -1)
+    {
+        fprintf(stderr, "error: open %s\n", "/var/run/netns/ns1");
+        exit(1);
+    }
 
-#ifdef SAFE_TO_DROP_ROOT
+    // switch this thread to the namespace
+    if (setns(namespaceFd, CLONE_NEWNET) == -1)
+    {
+        fprintf(stderr, "error: setns\n");
+        exit(1);
+    }
+*/
+
+    /*#ifdef SAFE_TO_DROP_ROOT
     setuid(getuid());
-#endif
+#endif*/
 
     preload = 0;
     datap = &outpack[8 + sizeof(struct timeval)];
@@ -345,38 +361,20 @@ int main(int argc, char *argv[])
                 break;
             case 'x':
                 //vrf
-                printf("VRF\n");
-                
-                //grab namespace name from arg
-                ns = calloc(1, strlen(optarg));
-                sscanf(optarg, "%s", ns);
-                
-                //get fd from opening /var/run/netns/NS_NAME
-                path_len = strlen("/var/run/netns/") + strlen(ns) + 2;
-                path = calloc(1, path_len);
-                snprintf(path, path_len,"/var/run/netns/%s",ns);
-                
-                
-                if(namespace_f = open(path, O_RDONLY) < 0){
-                    printf("Error opening file: %s\n", path);
-                    return -1;
+                namespaceFd = open(optarg, O_RDONLY);
+                if (namespaceFd == -1)
+                {
+                    fprintf(stderr, "error: could not open %s\n", optarg);
+                    exit(1);
                 }
-                
-                //set NS_NAME
-                if(setns(namespace_f, CLONE_NEWNET) == -1){
-                    if(errno == EPERM){
-                        printf("flexping must be run as root to set vrf\n");
-                        close(namespace_f);
-                        return -1;
-                    }
-                    else{
-                        printf("Error setting namespace to %s errno: %s\n", path, strerror(errno));
-                        close(namespace_f);
-                        return -1;
-                    }
+
+                // switch this thread to the namespace
+                if (setns(namespaceFd, CLONE_NEWNET) == -1)
+                {
+                    fprintf(stderr, "error: could not set to namespace\n");
+                    exit(1);
                 }
-                
-                close(namespace_f);
+                close(namespaceFd);
                 break;
             default:
                 usage();
@@ -395,7 +393,6 @@ int main(int argc, char *argv[])
         exit(2);
     }
 
-    //test: close fd to ns here
     target = *argv;
 
     memset(&whereto, 0, sizeof(struct sockaddr));
@@ -745,8 +742,8 @@ pr_pack(char *buf, int cc, struct sockaddr_in *from)
             dp = &outpack[8 + sizeof(struct timeval)];
             for (i = 8; i < datalen; ++i, ++cp, ++dp) {
                 if (*cp != *dp) {
-                    (void)printf("\nwrong data byte #%d should be 0x%x but was 0x%x",
-                            i, *dp, *cp);
+                    //(void)printf("\nwrong data byte #%d should be 0x%x but was 0x%x",
+                      //      i, *dp, *cp);
                     cp = (u_char*)(icp + 1);
                     for (i = 8; i < datalen; ++i, ++cp) {
                         if ((i % 32) == 8)
