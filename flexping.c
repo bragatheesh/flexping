@@ -365,11 +365,13 @@ int main(int argc, char *argv[])
                 //set NS_NAME
                 if(setns(namespace_f, CLONE_NEWNET) == -1){
                     if(errno == EPERM){
-                        printf("flexping requires sudo before setting vrf\n");
+                        printf("flexping must be run as root to set vrf\n");
+                        close(namespace_f);
                         return -1;
                     }
                     else{
                         printf("Error setting namespace to %s errno: %s\n", path, strerror(errno));
+                        close(namespace_f);
                         return -1;
                     }
                 }
