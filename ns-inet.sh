@@ -33,7 +33,6 @@ if [[ $EUID -ne 0 ]]; then
         ip netns exec $NS ip addr add ${VPEER_ADDR}/24 dev ${VPEER}
         ip netns exec $NS ip link set ${VPEER} up
         ip netns exec $NS ip link set lo up
-        ip netns exec $NS ip route add default via ${VETH_ADDR}
 
         # Enable IP-forwarding.
         echo 1 > /proc/sys/net/ipv4/ip_forward

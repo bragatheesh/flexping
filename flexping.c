@@ -231,26 +231,6 @@ int main(int argc, char *argv[])
         (void)fprintf(stderr, "ping: unknown protocol icmp.\n");
         exit(2);
     }
-/*
-    // acquire a handle to the namespace
-    int namespaceFd = open("/var/run/netns/ns1", O_RDONLY);
-    if (namespaceFd == -1)
-    {
-        fprintf(stderr, "error: open %s\n", "/var/run/netns/ns1");
-        exit(1);
-    }
-
-    // switch this thread to the namespace
-    if (setns(namespaceFd, CLONE_NEWNET) == -1)
-    {
-        fprintf(stderr, "error: setns\n");
-        exit(1);
-    }
-*/
-
-    /*#ifdef SAFE_TO_DROP_ROOT
-    setuid(getuid());
-#endif*/
 
     preload = 0;
     datap = &outpack[8 + sizeof(struct timeval)];
@@ -361,16 +341,17 @@ int main(int argc, char *argv[])
                 break;
             case 'x':
                 //vrf
-                namespaceFd = open(optarg, O_RDONLY);
-                if (namespaceFd == -1)
-                {
+                path_len = strlen("/var/run/netns/") + strlen(optarg) + 2;
+                path = calloc(1, path_len);
+                sprintf(path, "/var/run/netns/%s", optarg);
+                namespaceFd = open(path, O_RDONLY);
+                if (namespaceFd == -1){
                     fprintf(stderr, "error: could not open %s\n", optarg);
                     exit(1);
                 }
 
                 // switch this thread to the namespace
-                if (setns(namespaceFd, CLONE_NEWNET) == -1)
-                {
+                if (setns(namespaceFd, CLONE_NEWNET) == -1){
                     fprintf(stderr, "error: could not set to namespace\n");
                     exit(1);
                 }
